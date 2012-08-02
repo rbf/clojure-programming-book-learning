@@ -1,5 +1,6 @@
 (ns clojure-programming-book-learning.core
-  #_(:gen-class))
+  #_(:gen-class)
+  (:use clojure-programming-book-learning.book-ch2))
 
 ;; Destructuring (page 34)
 
