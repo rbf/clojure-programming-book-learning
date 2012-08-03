@@ -1,6 +1,10 @@
 (ns clojure-programming-book-learning.book-ch2)
 
 ;; Title: Functional Programming
+;; Page 51
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; Errata
 
@@ -17,7 +21,7 @@
 ;; + #(logger (format "[%1$tY.%1$tm.%1$td %1$tH:%1$tM:%1$tS] %2$s" (java.util.Date.) %)))
 ;;                                      ^
 
-;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
                                          
 ;; Higher-order functions (HOFs) (from page 61 on)
 
