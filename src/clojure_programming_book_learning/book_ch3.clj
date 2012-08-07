@@ -1,4 +1,4 @@
-(ns clojure-progqramming-book-learning.book-ch3)
+(ns clojure-programming-book-learning.book-ch3)
 
 ;; Title: Collections and Data Structures
 ;; Page 83
