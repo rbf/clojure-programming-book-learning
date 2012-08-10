@@ -241,6 +241,36 @@
   (println (seq ())) ; nil
   (println (seq nil)) ; nil
   
+  (println "first")
+  (println (first "Clojure")) ; C
+  (println (first [1])) ; 1
+  (println (first {1 2})) ; [1 2]
+  (println (first '(1))) ; 1
+  (println (first [])) ; nil
+  (println (first {})) ; nil
+  (println (first ())) ; nil
+  (println (first nil)) ; nil
+  
+  (println "rest")
+  (println (rest "Clojure")) ; (l o j u r e)
+  (println (rest [1])) ; ()
+  (println (rest {1 2})) ; ()
+  (println (rest '(1))) ; ()
+  (println (rest [])) ; ()
+  (println (rest {})) ; ()
+  (println (rest ())) ; ()
+  (println (rest nil)) ; ()
+  
+  (println "next")
+  (println (next "Clojure")) ; (l o j u r e)
+  (println (next [1])) ; nil
+  (println (next {1 2})) ; nil
+  (println (next '(1))) ; nil
+  (println (next [])) ; nil
+  (println (next {})) ; nil
+  (println (next ())) ; nil
+  (println (next nil)) ; nil
+  
   )
 
 
@@ -291,6 +321,406 @@
   "Calculates relative frequency of each letter in a string"
   [string]
   (println (for [[k v] (make-freq-relative (letter-freq string))] (format "\n%s => %5.2f" (name k) v))))
+
+
+; Sequences are not iterators (page 91)
+
+;=> (doc doseq)
+;-------------------------
+;clojure.core/doseq
+;([seq-exprs & body])
+;Macro
+;  Repeatedly executes body (presumably for side-effects) with
+;  bindings and filtering as provided by "for".  Does not retain
+;  the head of the sequence. Returns nil.
+
+(defn try-doseq
+  []
+  (doseq [x (range 10)]
+    (println x))
+  (doseq [x (range 4) y (range 2)]
+    (println x y))
+  ; Compare to for
+  (println (for [x (range 4) y (range 2)]
+    [x y])))
+
+; Sequences are not lists (page 92)
+
+; A list tracks its lenght, i.e. (count) on a list is a cheap, constant-time operation.
+; Obtaining the length of a seq carries a cost since the seq must be fully traversed, and they may be infinite.
+
+(defn compare-seq-and-list
+  []
+  (let [s (time (range 1e4))] ;"Elapsed time: 0.033 msecs"
+    (time (count s))) ; "Elapsed time: 0.891 msecs"
+  (let [l (time (apply list (range 1e4)))] ; "Elapsed time: 0.981 msecs"
+    (time (count l))) ; "Elapsed time: 0.0020 msecs"
+  (let [s (time (range 1e6))] ; "Elapsed time: 0.0080 msecs"
+    (time (count s))) ; "Elapsed time: 125.605 msecs"
+  (let [l (time (apply list (range 1e6)))] ; "Elapsed time: 1106.038 msecs"
+    (time (count l))) ; "Elapsed time: 0.020 msecs"
+  )
+
+
+; Creating seqs (page 92)
+
+;=> (doc cons)
+;-------------------------
+;clojure.core/cons
+;([x seq])
+;  Returns a new seq where x is the first element and seq is
+;    the rest.
+
+;=> (doc list*)
+;-------------------------
+;clojure.core/list*
+;([args] [a args] [a b args] [a b c args] [a b c d & more])
+;  Creates a new list containing the items prepended to the rest, the
+;  last of which will be treated as a sequence.
+
+(defn try-seq-creation
+  []
+  (println (cons 0 (range 1 5))) ; (0 1 2 3 4)
+  (println (cons 0 [1 2 3])) ; (0 1 2 3)
+  (println (list* 0 1 2 3 4 (range 5 10))) ; (0 1 2 3 4 5 6 7 8 9)
+  ; Compare to conj
+  (println (conj (range 1 5) 0)) ; (0 1 2 3 4)
+  (println (conj (apply list (range 1 5)) 0)) ; (0 1 2 3 4)
+  (println (conj [1 2 3] 0)) ; [1 2 3 0]
+  (println (conj (range 5 10) 0 1 2 3 4))) ; (4 3 2 1 0 5 6 7 8 9)
+
+
+; Lazy seqs (page 93)
+
+(defn random-ints
+  "Returns a lazy seq of random integers in the range [0, limit)"
+  [limit]
+  (lazy-seq
+    (println "Look, I'm realizing now an item of the lazy-seq!")
+    (cons (rand-int limit)
+          (random-ints limit))))
+
+(defn random-ints-with-proof
+  "Returns a lazy seq of random integers in the range [0, limit)"
+  [limit]
+  (lazy-seq
+    (let [new-random-int (rand-int limit)]
+      (println (format "Look, I'm realizing now an item of the lazy-seq! It is the %d" new-random-int))
+      (cons new-random-int
+            (random-ints-with-proof limit)))))
+
+; (repeatedly) returns a lazy seq applying the argument function,
+; so that previous function could in fact be written like follows:
+
+(defn random-ints2
+  "Returns a lazy seq of random integers in the range [0, limit)"
+  [limit]
+  (repeatedly #(rand-int limit)))
+
+
+; Difference between 'rest' and 'next' (page 96)
+; 'rest' blindly returns the tail of a seq, without realization
+; 'next' checks for a non-empty tail seq, thus forcing the potential realiation of the tail's head.
+
+;=> (def tail (next (random-ints 50)))
+;Look, I'm realizing now an item of the lazy-seq!
+;Look, I'm realizing now an item of the lazy-seq!
+;#'clojure-programming-book-learning.book-ch3/tail
+
+;=> (def tail (rest (random-ints 50)))
+;Look, I'm realizing now an item of the lazy-seq!
+;#'clojure-programming-book-learning.book-ch3/tail
+
+
+; 'doall' ensures a complete realization of the lazy seq while retaining the values
+; 'dorun' does the same whitout retaining the values, though (i.e. when caring about side-effects)
+
+;=> (doc dorun)
+;-------------------------
+;clojure.core/dorun
+;([coll] [n coll])
+;  When lazy sequences are produced via functions that have side
+;  effects, any effects other than those needed to produce the first
+;  element in the seq do not occur until the seq is consumed. dorun can
+;  be used to force any effects. Walks through the successive nexts of
+;  the seq, does not retain the head and returns nil.
+;nil
+
+;=> (doc doall)
+;-------------------------
+;clojure.core/doall
+;([coll] [n coll])
+;  When lazy sequences are produced via functions that have side
+;  effects, any effects other than those needed to produce the first
+;  element in the seq do not occur until the seq is consumed. doall can
+;  be used to force any effects. Walks through the successive nexts of
+;  the seq, retains the head and returns it, thus causing the entire
+;  seq to reside in memory at one time.
+;nil
+
+(defn try-doall-vs-dorun
+  []
+  (let [s1 (dorun (take 5 (random-ints 50)))
+        s2 (doall (take 5 (random-ints 50)))]
+    (println s1)
+    (println s2)))
+
+; iterate (page 97)
+
+(defn table-of
+  [x]
+  (iterate (partial + x) 0))
+
+(defn table-of2
+  [x]
+  (iterate #(+ x %) 0))
+
+; NB: funtion literal seems more performant than partial:
+
+;=> (time (nth (table-of 2) 1e8))
+;"Elapsed time: 26515.02 msecs"
+;200000000
+
+;=> (time (nth (table-of2 2) 1e8))
+;"Elapsed time: 10251.736 msecs"
+;200000000
+
+
+; Common pattern in Clojure (page 98): extract a sequence from data source,
+; process it and turn it back into a more appropiate data structure. Example:
+
+(defn remove-voyels
+  [string]
+  (apply str (remove (set "aeiou") string)))
+
+
+; Head retention (page 98)
+
+;=> (doc split-with)
+;-------------------------
+;clojure.core/split-with
+;([pred coll])
+;  Returns a vector of [(take-while pred coll) (drop-while pred coll)]
+  
+(defn try-split-with
+  []
+  (println (split-with neg? (range -5 5)))
+  (println (split-with neg? [-5 -4 -3 0 3 4 -5 -6])))
+
+(defn check-head-retention-oom
+  []
+  (let [[first-part second-part] (split-with #(< % 12) (range 1e8))]
+    [(count second-part) (count first-part)]))
+
+;=> (check-head-retention-oom)
+;OutOfMemoryError Java heap space  java.lang.Long.valueOf (Long.java:557)
+
+(defn check-head-retention-no-retention
+  []
+  (let [[first-part second-part] (split-with #(< % 12) (range 1e8))]
+    [(count first-part) (count second-part)]))
+
+;=> (check-head-retention-no-retention)
+;[12 99999988]
+
+
+;; Associative abstraction (page 99)
+
+(defn try-associative-functions
+  "Trying assoc, dissoc, get, contains?"
+  []
+  (let [m {:a 1 :b 2 :c 3}
+        v [1 2 3]
+        s #{1 2 3}
+        l '(1 2 3)]
+  (println "Maps are the canonical associative data structure:")
+  (println (get m :a)) ; 1
+  (println (get m :d)) ; nil
+  (println (get m :d "default-value")) ; default-value
+  (println (assoc m :d 4)) ; {:d 4, :a 1, :c 3, :b 2}
+  (println (assoc m
+                  :d 4
+                  :e 5
+                  :f 6)) ; {:f 6, :e 5, :d 4, :a 1, :c 3, :b 2}
+  (println (dissoc m :b)) ; {:a 1, :c 3}
+  (println (dissoc m :d)) ; {:a 1, :c 3, :b 2}
+  (println (dissoc m :a :c)) ; {:b 2}
+  (println (contains? m :a)) ; true
+  (println (contains? m :f)) ; false
+  
+  (println "")  
+  (println "Vectors are also associative collections of values with their indexes:")
+  (println (get v 1)) ; 1
+  (println (get v 10)) ; nil
+  (println (get v 10 "default-value")) ; default-value
+  (println (assoc v 
+                  1 "tada"
+                  0 :first
+                  2 10)) ; 
+  (println (assoc v 3 "you can append a value like conj"))
+  #_(println (assoc v 4 "but only at the position (count v)")) ; IndexOutOfBoundsException   clojure.lang.PersistentVector.assocN (PersistentVector.java:136)
+  #_(println (dissoc v 1)) ; not supported by vectors: ClassCastException clojure.lang.PersistentVector cannot be cast to clojure.lang.IPersistentMap  clojure.lang.RT.dissoc (RT.java:747)
+  (println (contains? v 0)) ; true
+  (println (contains? v 3)) ; false
+
+  (println "")  
+  (println "Sets support also get (values keyed to themselves)")
+  (println (get s 1)) ; 1
+  (println (get s 10)) ; nil
+  (println (get s 10 "default-value")) ; default-value
+  (println (contains? s 0)) ; false
+  (println (contains? s 3)))) ; true
+
+(defn contains-value?
+  [coll x]
+  (boolean (some #{x} (if (map? coll) (vals coll) coll))))
+
+
+; Beware of 'nil' and 'false' values (page 102)
+
+(defn getting-nil-and-false-real-values
+  []
+  (let [m {:a false :b nil}]
+    (println m) ; {:a false, :b nil}
+    (println "(get m :b) =>" (get m :b)) ; (get m :b) => nil
+    (println "(get m :b \"default-value\") =>" (get m :b "default-value")) ; (get m :b "default-value") => nil
+    (println "(find m :b) =>" (find m :b)) ; (find m :b) => [:b nil]
+    (println "(get m :not-existing-key) =>" (get m :not-existing-key)) ; (get m :not-existing-key) => nil
+    (println "(get m :not-existing-key \"default-value\") =>" (get m :not-existing-key "default-value")) ; (get m :not-existing-key "default-value") => default-value
+    (println "(find m :not-existing-key) =>" (find m :not-existing-key)) ; (find m :not-existing-key) => nil
+    
+    ; Usage pattern with when-let or if-let:
+    (println (if-let [v (get m :a)]
+               (format "I found the value of :a => %s" v)
+               "I don't find the value of :a... WHY?")) ; I don't find the value of :a... WHY?
+    (println (if-let [v (get m :b)]
+               (format "I found the value of :b => %s" v)
+               "I don't find the value of :b neither!! WHY?")) ; I don't find the value of :b... WHY?
+    (println (when-let [e (find m :b)]
+               [(key e) (val e)])) ; [:b nil]
+    (println (when-let [[k v] (find m :a)]
+              (format "Key %s was found and its value is %s" k v))) ; Key :a was found and its value is false
+    (println (when-let [[k v] (find m :b)]
+              (format "Key %s was found and its value is %s" k v))) ; Key :b was found and its value is null
+    (println (if-let [[k v] (find m :not-existing-key)]
+               (format "Key %s was found and its value is %s" k v)
+               "Key was NOT found!")) ; Key was NOT found!
+    
+    (println "(get m :a) =>" (get m :a)) ; (get m :a) => false
+    (println "(get m :a \"default-value\") =>" (get m :a "default-value")) ; (get m :a "default-value") => false
+    ))
+
+
+;; Indexed abstraction (page 103)
+
+(defn try-indexed-functions
+  "Trying nth (and comparing to get)"
+  []
+  (let [v [:a :b :c]
+        m {:a 1 :b 2 :c 3}
+        s #{1 2 3}
+        l '(1 2 3)]
+    (println (nth v 0)) ; :a
+    #_(println (nth m 0)) ; UnsupportedOperationException nth not supported on this type: PersistentArrayMap  clojure.lang.RT.nthFrom (RT.java:787)
+    #_(println (nth s 0)) ; UnsupportedOperationException nth not supported on this type: PersistentHashSet  clojure.lang.RT.nthFrom (RT.java:787)
+    (println (nth l 0)) ; 1
+    
+    (println (nth v 1)) ; :b
+    (println (get v 1)) ; :b
+    #_(println (nth v 10)) ; IndexOutOfBoundsException   clojure.lang.PersistentVector.arrayFor (PersistentVector.java:106)
+    (println (get v 10)) ; nil
+    (println (nth v 10 "default-value")) ; "default-value"
+    (println (get v 10 "default-value")) ; "default-value"
+    
+    ; 'get' is more resilient than 'nth'
+    #_(println (nth :something-not-supported 10)) ; UnsupportedOperationException nth not supported on this type: Keyword  clojure.lang.RT.nthFrom (RT.java:787)
+    (println (get :something-not-supported 10)) ; nil
+    ))
+
+
+;; Stack abstraction (page 104)
+
+(defn try-stack-functions
+  "Trying pop and peek (and comparing to rest and first)"
+  []
+  (let [v [:a :b :c]
+        m {:a 1 :b 2 :c 3}
+        s #{1 2 3}
+        l '(1 2 3)]
+    (println (peek v)) ; :c
+    (println (first v)) ; :a
+    #_(println (peek m)) ; ClassCastException clojure.lang.PersistentArrayMap cannot be cast to clojure.lang.IPersistentStack  clojure.lang.RT.peek (RT.java:623)
+    (println (first m)) ; [:a 1]
+    #_(println (peek s)) ; ClassCastException clojure.lang.PersistentHashSet cannot be cast to clojure.lang.IPersistentStack  clojure.lang.RT.peek (RT.java:623)
+    (println (first s)) ; 1
+    (println (peek l)) ; 1
+    (println (first l)) ; 1
+
+    (println (pop v)) ; [:a :b]
+    (println (rest v)) ; (:b :c)
+    #_(println (pop m)) ; ClassCastException clojure.lang.PersistentArrayMap cannot be cast to clojure.lang.IPersistentStack  clojure.lang.RT.pop (RT.java:629)
+    (println (rest m)) ; ([:c 3] [:b 2])
+    #_(println (pop s)) ; ClassCastException clojure.lang.PersistentHashSet cannot be cast to clojure.lang.IPersistentStack  clojure.lang.RT.pop (RT.java:629)
+    (println (rest s)) ; (2 3)
+    (println (pop l)) ; (2 3)
+    (println (rest l)) ; (2 3)
+    
+    (println (peek [])) ; nil
+    (println (first [])) ; nil
+    #_(println (pop [])) ; IllegalStateException Can't pop empty vector  clojure.lang.PersistentVector.pop (PersistentVector.java:346)
+    (println (rest [])) ; ()
+    (println (next [])) ; nil
+
+    (println (peek '())) ; nil
+    (println (first '())) ; nil
+    #_(println (pop '())) ; IllegalStateException Can't pop empty list  clojure.lang.PersistentList$EmptyList.pop (PersistentList.java:178)
+    (println (rest '())) ; ()
+    (println (next '())) ; nil
+    ))
+
+
+;; Set abstraction (page 105)
+
+(defn try-set-functions
+  "Trying disj (and comparing to dissoc)"
+  []
+  (let [v [:a :b :c]
+        m {:a 1 :b 2 :c 3}
+        s #{1 2 3}
+        l '(1 2 3)]
+    #_(println (disj v 1)) ; ClassCastException clojure.lang.PersistentVector cannot be cast to clojure.lang.IPersistentSet  clojure.core/disj (core.clj:1420)
+    #_(println (disj m 1)) ; ClassCastException clojure.lang.PersistentArrayMap cannot be cast to clojure.lang.IPersistentSet  clojure.core/disj (core.clj:1420)
+    (println (disj s 1)) ; #{2 3}
+    #_(println (disj l 1)) ; ClassCastException clojure.lang.PersistentList cannot be cast to clojure.lang.IPersistentSet  clojure.core/disj (core.clj:1420)
+
+    #_(println (dissoc v 1)) ; ClassCastException clojure.lang.PersistentVector cannot be cast to clojure.lang.IPersistentMap  clojure.lang.RT.dissoc (RT.java:747)
+    (println (dissoc m :a)) ; {:c 3, :b 2}
+    #_(println (dissoc s 1)) ; ClassCastException clojure.lang.PersistentHashSet cannot be cast to clojure.lang.IPersistentMap  clojure.lang.RT.dissoc (RT.java:747)
+    #_(println (dissoc l 1)) ; ClassCastException clojure.lang.PersistentList cannot be cast to clojure.lang.IPersistentMap  clojure.lang.RT.dissoc (RT.java:747)
+    
+	  ;=> (doc clojure.set/subset?)
+	  ;-------------------------
+	  ;clojure.set/subset?
+	  ;([set1 set2])
+	  ;  Is set1 a subset of set2?
+    (println (clojure.set/subset? #{1 3} s)) ; true
+    (println (clojure.set/subset? #{1 3 2} s)) ; true
+    (println (clojure.set/subset? #{1 3 4} s)) ; false
+    ; and also superset? union, intersection, project...
+   
+    ; => (doc clojure.set/union)
+    ;-------------------------
+    ;clojure.set/union
+    ;([] [s1] [s1 s2] [s1 s2 & sets])
+    ;  Return a set that is the union of the input sets
+    (println (clojure.set/union #{3 4 5} s)) ; #{1 2 3 4 5}
+    (println (into s [3 4 5])) ; #{1 2 3 4 5}
+    (println (conj s 3 4 5)) ; #{1 2 3 4 5}
+    
+   
+    ))
+
+
 
 
 
