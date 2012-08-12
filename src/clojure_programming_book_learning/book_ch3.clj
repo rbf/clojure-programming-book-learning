@@ -714,11 +714,254 @@
     ;([] [s1] [s1 s2] [s1 s2 & sets])
     ;  Return a set that is the union of the input sets
     (println (clojure.set/union #{3 4 5} s)) ; #{1 2 3 4 5}
+    (println (into s #{3 4 5})) ; #{1 2 3 4 5}
     (println (into s [3 4 5])) ; #{1 2 3 4 5}
-    (println (conj s 3 4 5)) ; #{1 2 3 4 5}
-    
-   
+    (println (conj s 3 4 5)) ; #{1 2 3 4 5}   
     ))
+
+(defn compare-into-vs-union
+  []
+  (let [s1 (set (range 1e5))
+        s2 (set (range 1e5))]
+    (time (into s1 s2)) ; "Elapsed time: 141.828 msecs"
+    (time (clojure.set/union s1 s2)) ; "Elapsed time: 60.08 msecs"
+    nil ; We don't want 1e6 numbers printed in the REPL!
+    ))
+
+
+
+;; Sorted abstraction (page 106)
+
+(defn try-sorted-functions
+  "Trying rseq, subseq and rsubeq"
+  []
+  (let [v [:a :c :b]
+        m {:a 1 :c 3 :b 2}
+        s #{1 3 2}
+        l '(1 3 2)
+        sm (sorted-map :a 1 :c 3 :b 2)
+        ss (sorted-set 1 3 2)]
+    ; Making sorted versions
+    (println (sorted-set v)) ; #{[:a :c :b]}
+    (println (sorted-set m)) ; #{{:a 1, :c 3, :b 2}}
+    (println (sorted-set s)) ; #{#{1 2 3}}
+    (println (sorted-set l)) ; #{(1 3 2)}
+    (println)
+    (println (apply sorted-set v)) ; #{:a :b :c}
+    (println (apply sorted-set m)) ; #{[:a 1] [:b 2] [:c 3]}
+    (println (apply sorted-set s)) ; #{1 2 3}
+    (println (apply sorted-set l)) ; #{1 2 3}
+    (println)
+    (println (map sorted-set v)) ; (#{:a} #{:b} #{:c})
+    (println (map sorted-set m)) ; (#{[:a 1]} #{[:c 3]} #{[:b 2]})
+    (println (map sorted-set s)) ; (#{1} #{2} #{3})
+    (println (map sorted-set l)) ; (#{1} #{2} #{3})
+    (println)
+    
+    ; Checking for sorted collection
+    (println (instance? clojure.lang.Sorted v)) ; false
+    (println (instance? clojure.lang.Sorted m)) ; false
+    (println (instance? clojure.lang.Sorted s)) ; false
+    (println (instance? clojure.lang.Sorted l)) ; false
+    (println (instance? clojure.lang.Sorted sm)) ; true
+    (println (instance? clojure.lang.Sorted ss)) ; true
+    (println)
+    
+    ; Checking for reversible collection
+    (println (instance? clojure.lang.Reversible v)) ; true
+    (println (instance? clojure.lang.Reversible m)) ; false
+    (println (instance? clojure.lang.Reversible s)) ; false
+    (println (instance? clojure.lang.Reversible l)) ; false
+    (println (instance? clojure.lang.Reversible sm)) ; true
+    (println (instance? clojure.lang.Reversible ss)) ; true
+    (println)
+    
+    ; Producing reversed sequences
+    (println (rseq v)) ; (:b :c :a)
+    #_(println (rseq m)) ; ClassCastException clojure.lang.PersistentArrayMap cannot be cast to clojure.lang.Reversible  clojure.core/rseq (core.clj:1481)
+    #_(println (rseq s)) ; ClassCastException clojure.lang.PersistentHashSet cannot be cast to clojure.lang.Reversible  clojure.core/rseq (core.clj:1481)
+    #_(println (rseq l)) ; ClassCastException clojure.lang.PersistentList cannot be cast to clojure.lang.Reversible  clojure.core/rseq (core.clj:1481)
+    (println (rseq sm)) ; ([:c 3] [:b 2] [:a 1])
+    (println (rseq ss)) ; (3 2 1)
+    (println)
+    
+    ; Producing subseqs
+    #_(println (subseq v <= 1)) ; ClassCastException clojure.lang.PersistentVector cannot be cast to clojure.lang.Sorted  clojure.core/subseq (core.clj:4513)
+    (println (subseq sm < :c)) ; ([:a 1] [:b 2])
+    (println (subseq ss >= 2)) ; (2 3)
+    
+    ))
+
+; Compare performance of 'rseq' and 'reverse'
+
+;=> (doc rseq)
+;-------------------------
+;clojure.core/rseq
+;([rev])
+;  Returns, in constant time, a seq of the items in rev (which
+;  can be a vector or sorted-map), in reverse order. If rev is empty returns nil
+;nil
+
+;=> (doc reverse)
+;-------------------------
+;clojure.core/reverse
+;([coll])
+;  Returns a seq of the items in coll in reverse order. Not lazy.
+;nil
+
+; QUESTION:
+; Why vector, map, list, sorted-map and sorted-set take [& args], but set takes [coll]?
+; (time (apply sorted-set (range 10))) 
+; (time (apply set (range 10))) => doens't work             
+; (time (set (range 10)))             
+
+(defn compare-rseq-vs-reverse
+  []
+  (let [ss (time (apply sorted-set (range 5e5))) ; "Elapsed time: 1703.47 msecs"
+        s (time (set (range 5e5))) ; "Elapsed time: 971.725 msecs"
+        v (time (apply vector (range 5e5)))] ; "Elapsed time: 198.949 msecs"
+	  (println)
+    (time (rseq ss)) ; "Elapsed time: 0.036 msecs"
+	  (time (reverse ss)) ; "Elapsed time: 446.994 msecs"
+	  (println)
+	  (time (reverse s)) ; "Elapsed time: 897.576 msecs"
+	  (println)
+    (time (rseq v)) ; "Elapsed time: 0.0030 msecs"
+	  (time (reverse v)) ; "Elapsed time: 213.371 msecs"
+	  #_(time (rseq (set (range 1e6)))) ; ClassCastException clojure.lang.PersistentHashSet cannot be cast to clojure.lang.Reversible  clojure.core/rseq (core.clj:1481)
+	  #_(time (reverse ( set (range 1e6)))) ; OutOfMemoryError Java heap space  clojure.lang.PersistentHashMap.assoc (PersistentHashMap.java:147)
+	  nil))
+
+; Comparators and predicates to define ordering (page 107)
+
+(defn weird-comparator
+  "This comparator orders even numbers smaller than odd numbers, while maintaining the order within even and odd numbers.
+  
+  Ex:
+  (sort weird-comparator (repeatedly 10 #(rand-int 100)))
+  ;= (40 42 60 64 72 17 19 47 59 91)"
+  [x y]
+  (if (even? x)
+    (if (even? y)
+      (compare x y)
+      -1)
+    (if (even? y)
+      1
+      (compare x y))))
+
+(defn dumb-weird-comparator
+  "This comparator orders even numbers smaller than odd numbers, but within even and odd numbers all are considered equal.
+  
+  Ex:
+  (sort dumb-weird-comparator (repeatedly 10 #(rand-int 100)))
+	  ;= (72 54 14 48 95 17 91 33 31 61)"
+	  [x y]
+	  (if (even? x)
+	    (if (even? y)
+       0
+       -1)
+      (if (even? y)
+       1
+       0)))
+     
+
+(defn try-comparators-and-predicates-to-sort
+  []
+  (println (sort < (repeatedly 10 #(rand-int 100))))
+  (println (sort (comp even? first list) (repeatedly 10 #(rand-int 100))))
+  (println (sort #(if (even? %) (if (even? %2) (compare % %2) -1) (if (even? %2) 1 (compare % %2))) (repeatedly 10 #(rand-int 100))))
+  (println (sort weird-comparator (repeatedly 10 #(rand-int 100))))
+  )
+
+(defn try-sorted-map-by
+  []
+  (let [pairs [:z 11 :y 22 :x 33 :c 44 :a 55 :b 66]]
+    (println (apply sorted-map pairs))
+    (println (apply (partial sorted-map-by (comp - compare)) pairs))))
+
+(defn try-sorted-set-by
+  []
+  (let [numbers (repeatedly 10 #(rand-int 100))]
+    (println numbers) ; (13 63 18 12 9 76 52 92 20 95)
+    (println (apply sorted-set numbers)) ; #{9 12 13 18 20 52 63 76 92 95}
+    (println (apply (partial sorted-set-by weird-comparator) numbers)) ; #{12 18 20 52 76 92 9 13 63 95}
+    
+    ; "Sort order defines equality within an ordered set or map" (parge 108)
+    (let [sm (apply (partial sorted-set-by dumb-weird-comparator) numbers)]
+      (println)
+      (println sm) ; #{18 13}
+      (println (get sm 2)) ; 18
+      (println (get sm 4)) ; 18
+      (println (get sm 1)) ; 13
+      (println (get sm 3)) ; 13
+      (println)
+      (println (disj sm 2)) ; #{13}
+      (println (disj sm 3)) ; #{18}
+      )))
+
+
+; Interpolation example (page 110)
+
+;=> (doc vector)
+;-------------------------
+;clojure.core/vector
+;([] [a] [a b] [a b c] [a b c d] [a b c d & args])
+;  Creates a new vector containing the args.
+;nil
+
+;=> (doc vec)
+;-------------------------
+;clojure.core/vec
+;([coll])
+;  Creates a new vector containing the contents of coll.
+;nil
+
+(defn interpolate
+  "Takes a collection of points (as [x y] tuples), returning a function
+   which is a linear interpolation between those points.
+
+   Ex:
+   => (def f (interpolate [[0 0] [10 10] [15 5]]))
+   #'clojure-programming-book-learning.book-ch3/f
+   => (map f [2 10 8])
+   (2 10 8)"
+  [points]
+  (let [results (into (sorted-map) (map vec points))]
+    (fn [x]
+      (let [[xa ya] (first (rsubseq results <= x))
+            [xb yb] (first (subseq results > x))]
+        (if (and xa xb)
+          (/ (+ (* ya (- xb x)) (* yb (- x xa)))
+             (- xb xa))
+          (or ya yb))))))
+
+(defn translate-to-riffli 
+  [string]
+  (apply str (map (fn [letter] (if ((set "aeiouäöüAEIOUÄÖÜ") letter)
+                           (str letter "n" (clojure.string/lower-case letter) "f" (clojure.string/lower-case letter))
+                           letter))
+            string)))
+
+(defn translate-to-riffli2
+  [string]
+  (clojure.string/replace string
+                          #"[aeiouäöüAEIOUÄÖÜ]"
+                          #(str %1 "n" (clojure.string/lower-case %1) "f" (clojure.string/lower-case %1))))
+
+(defn translate-from-riffli2
+  [string]
+  (clojure.string/replace string
+                          #"([aeiouäöüAEIOUÄÖÜ])n[aeiouäöüAEIOUÄÖÜ]f[aeiouäöüAEIOUÄÖÜ]"
+                          #(%1 1)))
+
+;; Concise Collection Access (page 111)
+
+
+
+
+
+
+
 
 
 
